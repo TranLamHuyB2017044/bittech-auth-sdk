@@ -1,10 +1,8 @@
 import httpx
 import json
-import logging
+from loguru import logger
 from typing import Optional, List, Dict, Any, Union
 from .models import HKBAuthResponse, HKBConnectionRecord
-
-logger = logging.getLogger("bittech_hkb")
 
 class HKBClient:
     def __init__(self, base_url: str = "https://auth.hkbcert.vn"):
@@ -12,20 +10,24 @@ class HKBClient:
         self._token_cache: Dict[str, Dict[str, Any]] = {}
 
     async def get_system_connections(
-        self, group_key: str, client_registers: List[str]
+        self, group_key: Union[str, List[str]], client_registers: List[str]
     ) -> HKBAuthResponse:
         """
         Retrieves available system connections from HKB.
+        
+        Args:
+            group_key: A single group key or a list of group keys to filter connections.
+            client_registers: A list of client register application keys.
         """
         url = f"{self.base_url}/api/system-connections/get"
-        params = {
+        payload = {
             "group_key": group_key,
             "client_register": client_registers
         }
         
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(url, params=params, timeout=10.0)
+                response = await client.request("GET", url, json=payload, timeout=10.0)
                 return self._parse_response(response)
             except Exception as e:
                 return HKBAuthResponse(success=False, message=str(e))
@@ -58,6 +60,7 @@ class HKBClient:
 
         async with httpx.AsyncClient() as client:
             try:
+                logger.info(f"HKB Client: Registration Payload: {json.dumps(payload, ensure_ascii=False)}")
                 response = await client.post(url, json=payload, timeout=10.0)
                 parsed = self._parse_response(response)
                 
@@ -66,6 +69,29 @@ class HKBClient:
                     await self._handle_auto_auth(parsed, system_id, external_id)
                 
                 return parsed
+            except Exception as e:
+                return HKBAuthResponse(success=False, message=str(e))
+
+    async def revoke_api_key(
+        self,
+        system_id: str,
+        api_key: str,
+        password: str
+    ) -> HKBAuthResponse:
+        """
+        Revokes a system's API key.
+        """
+        url = f"{self.base_url}/api/client-registers/revoke-api-key"
+        payload = {
+            "system_id": system_id,
+            "api_key": api_key,
+            "password": password
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, json=payload, timeout=10.0)
+                return self._parse_response(response)
             except Exception as e:
                 return HKBAuthResponse(success=False, message=str(e))
 
@@ -111,7 +137,10 @@ class HKBClient:
             return HKBAuthResponse(success=False, message="Failed to obtain authentication token")
 
         url = f"{endpoint.rstrip('/')}/api/share/car-documents"
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
         body = {
             "authentication": {
                 "system_id": system_id,
@@ -128,6 +157,70 @@ class HKBClient:
             except Exception as e:
                 return HKBAuthResponse(success=False, message=str(e))
 
+    async def get_employees(
+        self, url: str, system_id: str, api_key: str, user_id: int
+    ) -> HKBAuthResponse:
+        """
+        Fetches employee list from a specific URL using HKB auth.
+        """
+        # Get token
+        token = await self._get_valid_token(system_id, api_key, user_id)
+        if not token:
+            return HKBAuthResponse(success=False, message="Failed to obtain authentication token")
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
+        body = {
+            "authentication": {
+                "system_id": system_id,
+                "api_key": api_key,
+                "user_id": user_id
+            }
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                # Using GET as requested by the user
+                response = await client.request("GET", url, json=body, headers=headers, timeout=30.0)
+                return self._parse_response(response)
+            except Exception as e:
+                return HKBAuthResponse(success=False, message=str(e))
+
+    async def get_hr_users(
+        self, endpoint: str, system_id: str, api_key: str, user_id: int
+    ) -> HKBAuthResponse:
+        """
+        Fetches HR user list from a specific endpoint. 
+        Requested for 'tester' environment.
+        """
+        # Get token
+        token = await self._get_valid_token(system_id, api_key, user_id)
+        if not token:
+            return HKBAuthResponse(success=False, message="Failed to obtain authentication token")
+
+        url = f"{endpoint.rstrip('/')}/api/hr/users"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
+        body = {
+            "authentication": {
+                "system_id": system_id,
+                "api_key": api_key,
+                "user_id": user_id
+            }
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                # Supporting both GET/POST, using GET as requested
+                response = await client.request("GET", url, json=body, headers=headers, timeout=30.0)
+                return self._parse_response(response)
+            except Exception as e:
+                return HKBAuthResponse(success=False, message=str(e))
+
     async def _get_valid_token(self, system_id: str, api_key: str, user_id: int) -> Optional[str]:
         cache = self._token_cache.get(system_id)
         if cache and cache.get("token"):
@@ -140,9 +233,10 @@ class HKBClient:
 
     def _parse_response(self, response: httpx.Response) -> HKBAuthResponse:
         status_code = response.status_code
+        raw_text = response.text
         try:
             data = response.json()
-            is_success = (data.get("success") is True) or (data.get("status") == "success")
+            is_success = (data.get("success") is True) or (data.get("status") == "success") or (data.get("status") is True)
             return HKBAuthResponse(
                 success=is_success,
                 status=data.get("status"),
@@ -150,11 +244,16 @@ class HKBClient:
                 data=data.get("data"),
                 status_code=status_code
             )
-        except Exception:
+        except Exception as e:
+            # Log the raw text for debugging if JSON parsing fails
+            logger.error(f"HKB Client Error: Failed to parse response. Error: {e}")
+            logger.error(f"Status: {status_code}")
+            logger.error(f"Raw Response Content: {raw_text[:2000]}") 
+            
             return HKBAuthResponse(
                 success=False,
                 message="Invalid JSON response",
-                data={"raw": response.text},
+                data={"raw": raw_text},
                 status_code=status_code
             )
 
@@ -178,3 +277,75 @@ class HKBClient:
                     await self.authenticate(system_id, api_key, int(external_id))
         except Exception as e:
             logger.warning(f"Auto-auth failed: {e}")
+
+    async def upload_timekeepers(
+        self, url: str, system_id: str, api_key: str, user_id: int, 
+        payload: List[Dict[str, Any]], files: Dict[str, bytes]
+    ) -> HKBAuthResponse:
+        """
+        Uploads attendance timekeepers with images as multipart form data.
+        Follows Laravel-style field flattening (e.g. authentication[system_id]).
+        """
+        # Get token
+        token = await self._get_valid_token(system_id, api_key, user_id)
+        if not token:
+            return HKBAuthResponse(success=False, message="Failed to obtain authentication token")
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
+        
+        # Prepare DATA fields (Laravel style flattening)
+        body_data = {
+            "authentication": {
+                "api_key": api_key,
+                "system_id": system_id,
+                "user_id": int(user_id)
+            },
+            "payload": payload
+        }
+        
+        flattened_data = self._flatten_multipart_fields(body_data)
+        
+        # Prepare FILE fields
+        files_dict = {}
+        for session_id, image_bytes in files.items():
+            # Laravel code: ->attach('files[id]', $handle, $filename)
+            field_name = f"files[{session_id}]" 
+            files_dict[field_name] = (f"{session_id}.webp", image_bytes, "image/webp")
+
+        logger.info(f"HKB Client: POST {url}")
+        logger.info(f"HKB Client: Headers: {headers}")
+        logger.info(f"HKB Client: FULL Flattened Data: {json.dumps(flattened_data, ensure_ascii=False, indent=2)}")
+        logger.info(f"HKB Client: File fields: {list(files_dict.keys())}")
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                # 'data' sends flattened fields, 'files' sends multipart files
+                response = await client.post(url, headers=headers, data=flattened_data, files=files_dict, timeout=60.0)
+                return self._parse_response(response)
+            except Exception as e:
+                logger.error(f"Upload timekeepers failed: {e}")
+                return HKBAuthResponse(success=False, message=str(e))
+
+    def _flatten_multipart_fields(self, data: Any, prefix: str = "") -> Dict[str, str]:
+        """
+        Converts nested dictionaries/lists into a flat dict of Laravel-style keys.
+        """
+        out = {}
+        if isinstance(data, dict):
+            for key, value in data.items():
+                name = f"{prefix}[{key}]" if prefix else str(key)
+                out.update(self._flatten_multipart_fields(value, name))
+        elif isinstance(data, (list, tuple)):
+            for i, value in enumerate(data):
+                name = f"{prefix}[{i}]"
+                out.update(self._flatten_multipart_fields(value, name))
+        else:
+            if prefix:
+                if isinstance(data, bool):
+                    out[prefix] = "1" if data else "0"
+                else:
+                    out[prefix] = str(data) if data is not None else ""
+        return out

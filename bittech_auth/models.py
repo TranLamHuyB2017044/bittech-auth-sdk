@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Union, List
 from datetime import datetime
 
 class HKBConnectionRecord(BaseModel):
@@ -17,7 +17,7 @@ class HKBConnectionRecord(BaseModel):
 
 class HKBAuthResponse(BaseModel):
     success: bool
-    status: Optional[str] = None
-    message: Optional[str] = None
-    data: Optional[Dict[str, Any]] = None
+    status: Optional[Union[str, bool]] = None
+    message: Optional[Union[str, Dict[str, Any]]] = None
+    data: Optional[Union[Dict[str, Any], List[Any]]] = None
     status_code: Optional[int] = None
