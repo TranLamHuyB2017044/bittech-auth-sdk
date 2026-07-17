@@ -103,7 +103,6 @@ from bittech_auth import AuthServiceClient, HttpxTransport, AuthService
 # 1. Khởi tạo transport và client
 transport = HttpxTransport()
 client = AuthServiceClient(
-    auth_api_url="https://auth.bittechx.cloud",
     system_id="ocr_service_backend",
     license_config_path="path/to/license_config.json",
     transport=transport

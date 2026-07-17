@@ -1,3 +1,4 @@
+import os
 import httpx
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Union
@@ -74,11 +75,17 @@ class AuthServiceClient:
 
     def __init__(
         self,
-        auth_api_url: str,
         system_id: str,
         license_config_path: Union[str, Path],
         transport: HttpTransport,
+        auth_api_url: Optional[str] = None,
     ) -> None:
+        if auth_api_url is None:
+            auth_api_url = os.getenv("AUTH_API_URL")
+        
+        if not auth_api_url:
+            raise ValueError("auth_api_url is required (either pass it to AuthServiceClient or set the AUTH_API_URL environment variable)")
+
         self.auth_api_url = auth_api_url.rstrip("/")
         self.system_id = system_id
         self.license_config_path = Path(license_config_path)
