@@ -114,6 +114,7 @@ class AuthServiceClient:
         label: str,
         expired_at: str,
         notes: str = "",
+        system_connection_id: int = 12,
     ) -> Dict[str, Any]:
         """
         Registers the system license file with the AuthService.
@@ -132,6 +133,7 @@ class AuthServiceClient:
                         )
                     },
                     data={
+                        "system_connection_id": str(system_connection_id),
                         "license_seed": seed,
                         "label": label,
                         "expired_at": expired_at,
@@ -162,7 +164,10 @@ class AuthServiceClient:
             }
             return self.transport.post(
                 f"{self.auth_api_url}/api/license/verify",
-                headers={"Accept": "application/json"},
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {license_key}",
+                },
                 json=payload,
             )
         except Exception as e:

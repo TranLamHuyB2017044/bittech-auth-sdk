@@ -76,6 +76,7 @@ class AuthService:
             label=label,
             expired_at=expired_at,
             notes=notes,
+            system_connection_id=connection_id,
         )
 
         data = result.get("data")
