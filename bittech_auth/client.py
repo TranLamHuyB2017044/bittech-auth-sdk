@@ -1,10 +1,13 @@
 import os
 import httpx
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Union
 from .license import load_license_seed
 from .security import create_request_metadata
 from .exceptions import AuthServiceRequestError
+
+logger = logging.getLogger("bittech_auth")
 
 
 class HttpTransport(Protocol):
@@ -164,6 +167,7 @@ class AuthServiceClient:
                 "timestamp": timestamp_str,
                 "signature": signature or "",
             }
+            logger.debug("verify_license payload: %s", payload)
             return self.transport.post(
                 f"{self.auth_api_url}/api/license/verify",
                 headers={"Accept": "application/json"},
