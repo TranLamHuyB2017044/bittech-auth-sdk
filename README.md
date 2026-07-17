@@ -68,7 +68,7 @@ class MyLicenseRepository:
         public_id: str,
         license_key: str,
         signature: Optional[str],
-        expired_at: datetime,
+        expired_at: str,
         notes: Optional[str],
         connection_id: int = 12,
     ) -> dict:

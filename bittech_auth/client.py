@@ -48,7 +48,16 @@ class HttpxTransport:
     ) -> Dict[str, Any]:
         with httpx.Client() as client:
             response = client.request("GET", url, headers=headers, json=json, timeout=15.0)
-            response.raise_for_status()
+            if response.status_code >= 400:
+                try:
+                    error_detail = response.json()
+                except Exception:
+                    error_detail = response.text
+                raise httpx.HTTPStatusError(
+                    f"HTTP Error {response.status_code}: {error_detail}",
+                    request=response.request,
+                    response=response
+                )
             return response.json()
 
     def post(
@@ -64,7 +73,16 @@ class HttpxTransport:
             response = client.post(
                 url, headers=headers, json=json, files=files, data=data, timeout=15.0
             )
-            response.raise_for_status()
+            if response.status_code >= 400:
+                try:
+                    error_detail = response.json()
+                except Exception:
+                    error_detail = response.text
+                raise httpx.HTTPStatusError(
+                    f"HTTP Error {response.status_code}: {error_detail}",
+                    request=response.request,
+                    response=response
+                )
             return response.json()
 
 

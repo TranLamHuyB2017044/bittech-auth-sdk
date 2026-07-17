@@ -72,15 +72,6 @@ class AuthService:
         if not expired_at:
             raise ValueError("Expiry date is required")
 
-        # Parse expired_at to verify it is valid
-        try:
-            clean_str = expired_at.replace("Z", "+00:00")
-            expired_at_dt = datetime.fromisoformat(clean_str)
-            if expired_at_dt.tzinfo is None:
-                expired_at_dt = expired_at_dt.replace(tzinfo=timezone.utc)
-        except Exception as e:
-            raise ValueError(f"Invalid expiry date format: {e}")
-
         result = self.client.register_license(
             label=label,
             expired_at=expired_at,
@@ -100,7 +91,7 @@ class AuthService:
             public_id=public_id,
             license_key=license_key,
             signature=signature,
-            expired_at=expired_at_dt,
+            expired_at=expired_at,
             notes=notes,
             connection_id=connection_id,
         )
