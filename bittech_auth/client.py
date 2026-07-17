@@ -167,7 +167,7 @@ class AuthServiceClient:
                 "timestamp": timestamp_str,
                 "signature": signature or "",
             }
-            logger.debug("verify_license payload: %s", payload)
+            print("verify_license payload: %s", payload)
             return self.transport.post(
                 f"{self.auth_api_url}/api/license/verify",
                 headers={"Accept": "application/json"},
