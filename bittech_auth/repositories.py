@@ -22,6 +22,7 @@ class LicenseRepository(Protocol):
         signature: Optional[str],
         expired_at: datetime,
         notes: Optional[str],
+        connection_id: int = 12,
     ) -> dict[str, Any]:
         ...
 

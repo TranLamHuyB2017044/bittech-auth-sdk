@@ -62,6 +62,7 @@ class AuthService:
         label: str,
         expired_at: str,
         notes: str = "",
+        connection_id: int = 12,
     ) -> Dict[str, Any]:
         """
         Registers a license and saves it to the local repository as pending.
@@ -101,6 +102,7 @@ class AuthService:
             signature=signature,
             expired_at=expired_at_dt,
             notes=notes,
+            connection_id=connection_id,
         )
 
         self.audits.log(

@@ -70,6 +70,7 @@ class MyLicenseRepository:
         signature: Optional[str],
         expired_at: datetime,
         notes: Optional[str],
+        connection_id: int = 12,
     ) -> dict:
         record = {
             "public_id": public_id,
@@ -78,6 +79,7 @@ class MyLicenseRepository:
             "expired_at": expired_at,
             "status": 0,  # Chờ xác thực ban đầu (status=0)
             "notes": notes,
+            "connection_id": connection_id,
         }
         self.db[license_key] = record
         return record
@@ -125,7 +127,8 @@ auth_service = AuthService(
 # Đọc file config license, tính seed, đẩy lên AuthService và lưu trạng thái chờ vào DB
 register_res = auth_service.register_license(
     label="Bản quyền OCR năm 2026",
-    expired_at="2027-07-17T00:00:00Z"
+    expired_at="2027-07-17T00:00:00Z",
+    connection_id=12  # Giá trị mặc định là 12
 )
 print("Đăng ký thành công license_key:", register_res.get("license_key"))
 
