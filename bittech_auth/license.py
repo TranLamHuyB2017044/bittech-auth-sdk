@@ -25,11 +25,13 @@ def sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def calculate_license_seed(config: dict) -> str:
+def calculate_license_seed(config: dict, filename: str) -> str:
     """
-    Calculates the license seed from a license config dictionary.
+    Calculates the license seed from a license config dictionary and filename.
     """
-    return sha256(canonical_json_stringify(config))
+    canonical_content = canonical_json_stringify(config)
+    content_to_hash = f"{filename}|{canonical_content}"
+    return sha256(content_to_hash)
 
 
 def load_license_config(path: str | Path) -> dict:
@@ -59,7 +61,11 @@ def load_license_config(path: str | Path) -> dict:
 
 def load_license_seed(path: str | Path) -> Tuple[str, dict]:
     """
-    Loads the license configuration and calculates its seed.
+    Loads the license configuration and retrieves or calculates its seed.
     """
     config = load_license_config(path)
-    return calculate_license_seed(config), config
+    seed = config.get("license_seed") or config.get("seed")
+    if not seed:
+        filename = Path(path).name
+        seed = calculate_license_seed(config, filename)
+    return seed, config

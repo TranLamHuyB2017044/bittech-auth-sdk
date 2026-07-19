@@ -157,17 +157,15 @@ class AuthServiceClient:
         try:
             seed, _ = load_license_seed(self.license_config_path)
             metadata = create_request_metadata()
-            from datetime import datetime
-            timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             payload = {
                 "license_key": license_key,
                 "license_seed": seed,
                 "system_id": self.system_id,
                 "nonce": metadata["nonce"],
-                "timestamp": timestamp_str,
+                "timestamp": metadata["timestamp"],
                 "signature": signature or "",
             }
-            print("verify_license payload: %s", payload)
+            print(f"verify_license payload: {payload}")
             return self.transport.post(
                 f"{self.auth_api_url}/api/license/verify",
                 headers={"Accept": "application/json"},
