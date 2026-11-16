@@ -1,4 +1,5 @@
 import os
+import json
 import httpx
 import logging
 from pathlib import Path
@@ -8,6 +9,38 @@ from .security import create_request_metadata
 from .exceptions import AuthServiceRequestError
 
 logger = logging.getLogger("bittech_auth")
+
+
+def _format_error_detail(error_detail: Any) -> str:
+    """
+    Recursively decodes embedded JSON strings (with Unicode escapes) and returns
+    a human-readable UTF-8 JSON string.
+    """
+    def _decode(val: Any) -> Any:
+        if isinstance(val, dict):
+            return {k: _decode(v) for k, v in val.items()}
+        if isinstance(val, list):
+            return [_decode(v) for v in val]
+        if isinstance(val, str):
+            stripped = val.strip()
+            if (stripped.startswith("{") and stripped.endswith("}")) or (
+                stripped.startswith("[") and stripped.endswith("]")
+            ):
+                try:
+                    return _decode(json.loads(stripped))
+                except Exception:
+                    pass
+            if "\\u" in val:
+                try:
+                    return val.encode("utf-8").decode("unicode_escape")
+                except Exception:
+                    pass
+        return val
+
+    decoded = _decode(error_detail)
+    if isinstance(decoded, (dict, list)):
+        return json.dumps(decoded, ensure_ascii=False, indent=2)
+    return str(decoded)
 
 
 class HttpTransport(Protocol):
@@ -53,9 +86,9 @@ class HttpxTransport:
             response = client.request("GET", url, headers=headers, json=json, timeout=15.0)
             if response.status_code >= 400:
                 try:
-                    error_detail = response.json()
+                    error_detail = _format_error_detail(response.json())
                 except Exception:
-                    error_detail = response.text
+                    error_detail = _format_error_detail(response.text)
                 raise httpx.HTTPStatusError(
                     f"HTTP Error {response.status_code}: {error_detail}",
                     request=response.request,
@@ -78,9 +111,9 @@ class HttpxTransport:
             )
             if response.status_code >= 400:
                 try:
-                    error_detail = response.json()
+                    error_detail = _format_error_detail(response.json())
                 except Exception:
-                    error_detail = response.text
+                    error_detail = _format_error_detail(response.text)
                 raise httpx.HTTPStatusError(
                     f"HTTP Error {response.status_code}: {error_detail}",
                     request=response.request,
@@ -150,16 +183,19 @@ class AuthServiceClient:
         self,
         license_key: str,
         signature: Optional[str],
+        license_seed: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Verifies the validity of the current license.
         """
         try:
-            seed, _ = load_license_seed(self.license_config_path)
+            seed = license_seed
+            if not seed and self.license_config_path and self.license_config_path.exists():
+                seed, _ = load_license_seed(self.license_config_path)
             metadata = create_request_metadata()
             payload = {
                 "license_key": license_key,
-                "license_seed": seed,
+                "license_seed": seed or "",
                 "system_id": self.system_id,
                 "nonce": metadata["nonce"],
                 "timestamp": metadata["timestamp"],
@@ -180,17 +216,22 @@ class AuthServiceClient:
         client_register: List[str],
         license_key: Optional[str],
         signature: Optional[str],
+        license_seed: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Retrieves system connection details from the AuthService.
         """
         try:
+            seed = license_seed
+            if not seed and self.license_config_path and self.license_config_path.exists():
+                seed, _ = load_license_seed(self.license_config_path)
             metadata = create_request_metadata()
             payload = {
                 "source_system_id": self.system_id,
                 "group_key": group_keys,
                 "client_register": client_register,
                 "license_key": license_key or "",
+                "license_seed": seed or "",
                 "nonce": metadata["nonce"],
                 "timestamp": metadata["timestamp"],
                 "signature": signature or "",
@@ -211,24 +252,27 @@ class AuthServiceClient:
         description: str,
         license_key: Optional[str],
         signature: Optional[str],
+        license_seed: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Registers a new client under the current system.
         """
         try:
-            seed, _ = load_license_seed(self.license_config_path)
+            seed = license_seed
+            if not seed and self.license_config_path and self.license_config_path.exists():
+                seed, _ = load_license_seed(self.license_config_path)
             metadata = create_request_metadata()
             payload = {
-                "system_connection_id": connection_id,
-                "target_system_id": target_system_id,
-                "source_system_id": self.system_id,
-                "external_id": external_id,
-                "description": description,
-                "license_key": license_key or "",
-                "license_seed": seed,
+                "system_connection_id": int(connection_id),
+                "target_system_id": str(target_system_id),
+                "source_system_id": str(self.system_id),
+                "external_id": str(external_id),
+                "description": str(description or ""),
+                "license_key": str(license_key or ""),
+                "license_seed": str(seed or ""),
                 "nonce": metadata["nonce"],
                 "timestamp": metadata["timestamp"],
-                "signature": signature or "",
+                "signature": str(signature or ""),
             }
             return self.transport.post(
                 f"{self.auth_api_url}/api/client-registers",
@@ -244,20 +288,27 @@ class AuthServiceClient:
         user_id: Union[int, str],
         license_key: Optional[str],
         signature: Optional[str],
+        target_system_id: Optional[str] = None,
+        license_seed: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Authenticates a user and retrieves an access token.
         """
         try:
+            seed = license_seed
+            if not seed and self.license_config_path and self.license_config_path.exists():
+                seed, _ = load_license_seed(self.license_config_path)
             metadata = create_request_metadata()
             payload = {
-                "source_system_id": self.system_id,
-                "license_key": license_key or "",
-                "api_key": api_key,
+                "source_system_id": str(self.system_id),
+                "target_system_id": str(target_system_id or ""),
+                "license_key": str(license_key or ""),
+                "license_seed": str(seed or ""),
+                "api_key": str(api_key),
                 "user_id": user_id,
                 "nonce": metadata["nonce"],
                 "timestamp": metadata["timestamp"],
-                "signature": signature or "",
+                "signature": str(signature or ""),
             }
             return self.transport.post(
                 f"{self.auth_api_url}/api/authenticate",
@@ -277,10 +328,12 @@ class AuthServiceClient:
         Verifies a Bearer token validity.
         """
         try:
+            seed, _ = load_license_seed(self.license_config_path)
             metadata = create_request_metadata()
             payload = {
                 "source_system_id": self.system_id,
                 "license_key": license_key or "",
+                "license_seed": seed,
                 "api_key": "",
                 "user_id": "",
                 "nonce": metadata["nonce"],

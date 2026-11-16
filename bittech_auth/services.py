@@ -124,6 +124,7 @@ class AuthService:
             client_register=client_register,
             license_key=license_record["license_key"],
             signature=license_record.get("signature"),
+            license_seed=license_record.get("license_seed"),
         )
 
     def register_client(
@@ -171,6 +172,7 @@ class AuthService:
         self,
         api_key: str,
         user_id: Union[int, str],
+        target_system_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Authenticates a user/client. Requires an active license.
@@ -186,6 +188,8 @@ class AuthService:
             user_id=user_id,
             license_key=license_record["license_key"],
             signature=license_record.get("signature"),
+            target_system_id=target_system_id,
+            license_seed=license_record.get("license_seed"),
         )
 
     def verify_token(self, token: str) -> Dict[str, Any]:
